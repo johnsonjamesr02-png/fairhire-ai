@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FairHire AI — Local Dashboard</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>FairHire AI</h1>
+      <p>Local dashboard — talks to the FastAPI backend at <code id="api-base-label"></code></p>
+    </header>
+
+    <section class="panel">
+      <h2>1. Job description</h2>
+      <textarea id="jd-text" rows="5" placeholder="Paste a job description..."></textarea>
+      <button id="parse-jd-btn">Parse job description</button>
+      <pre id="jd-output"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>2. Candidate resumes</h2>
+      <textarea id="resume-text" rows="5" placeholder="Paste one resume..."></textarea>
+      <button id="score-btn">Parse &amp; score this candidate</button>
+      <pre id="score-output"></pre>
+      <p class="hint">Click "Parse &amp; score" once per candidate; each result is added to the table below.</p>
+      <table id="results-table">
+        <thead><tr><th>Name</th><th>Fit score</th><th>Group (for audit only)</th><th>Selected?</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>3. Bias audit</h2>
+      <button id="audit-btn">Run four-fifths audit on results above</button>
+      <pre id="audit-output"></pre>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

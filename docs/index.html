@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FairHire AI — resume screening with a built-in bias audit</title>
+<meta name="description" content="An AI resume-screening pipeline that audits its own hiring recommendations for disparate impact under the EEOC four-fifths rule and NYC Local Law 144.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2316213D'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='%23F7F7F3' font-family='Georgia,serif'%3EF%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --ink: #16213D;
+    --paper: #F7F7F3;
+    --card: #FFFFFF;
+    --teal: #2A6F63;
+    --teal-ink: #1d4e45;
+    --rust: #B54708;
+    --hairline: #E1DFD8;
+    --muted: #5b6270;
+    --code-bg: #101a30;
+    --code-ink: #dbe4f0;
+    --shadow: 0 1px 2px rgba(22,33,61,0.04), 0 8px 24px rgba(22,33,61,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #EDEEF3;
+      --paper: #11141d;
+      --card: #171b28;
+      --teal: #5fb3a1;
+      --teal-ink: #bfe9de;
+      --rust: #e08a4f;
+      --hairline: #2a2f3f;
+      --muted: #9aa1b4;
+      --code-bg: #0b0e17;
+      --code-ink: #d9e2f5;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  a { color: var(--teal-ink); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+
+  header.site {
+    border-bottom: 1px solid var(--hairline);
+    position: sticky; top: 0; background: var(--paper);
+    z-index: 10;
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; text-decoration: none; color: var(--ink); }
+  .brand .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-family: Georgia, serif; font-size: 15px; }
+  .nav-links { display: flex; gap: 22px; font-size: 14px; }
+  .nav-links a { color: var(--muted); text-decoration: none; }
+  .nav-links a:hover { color: var(--ink); }
+
+  .hero { padding: 64px 0 40px; }
+  .eyebrow { color: var(--rust); font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 14px; }
+  h1 { font-size: 40px; line-height: 1.15; margin: 0 0 18px; letter-spacing: -0.01em; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 640px; margin: 0 0 28px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 30px; }
+  .badges img { display: block; height: 20px; }
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 8px; font-size: 14.5px; font-weight: 600; text-decoration: none; border: 1px solid transparent; transition: transform .08s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .btn.ghost { border-color: var(--hairline); color: var(--ink); }
+
+  section { padding: 44px 0; border-top: 1px solid var(--hairline); }
+  section h2 { font-size: 24px; margin: 0 0 8px; }
+  .section-sub { color: var(--muted); margin: 0 0 28px; max-width: 680px; }
+
+  .pitch { background: var(--card); border: 1px solid var(--hairline); border-radius: 12px; padding: 22px 24px; box-shadow: var(--shadow); font-size: 16.5px; }
+  .pitch strong { color: var(--teal-ink); }
+
+  /* architecture diagram */
+  .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin-top: 8px; }
+  .stage { background: var(--card); border: 1px solid var(--hairline); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow); flex: 1 1 150px; min-width: 150px; }
+  .stage h4 { margin: 0 0 6px; font-size: 13.5px; }
+  .stage p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .arrow { display: flex; align-items: center; justify-content: center; padding: 0 10px; color: var(--muted); font-size: 20px; flex: 0 0 auto; }
+  .pipeline-row { display: flex; align-items: stretch; flex-wrap: wrap; gap: 6px; }
+  .stage.audit { border-color: var(--teal); }
+  .note-inline { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+
+  /* demo results */
+  .demo-banner { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--hairline); border-radius: 10px; padding: 12px 16px; font-size: 13.5px; color: var(--muted); margin-bottom: 20px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); flex: 0 0 auto; }
+  table.results { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); font-size: 13.5px; }
+  table.results th, table.results td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--hairline); }
+  table.results th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+  table.results tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.yes { background: rgba(42,111,99,0.14); color: var(--teal-ink); }
+  .pill.no { background: rgba(107,114,128,0.14); color: var(--muted); }
+  .grp { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+  .audit-card { margin-top: 20px; border-radius: 10px; border: 1px solid #d98a4a55; background: var(--card); box-shadow: var(--shadow); padding: 18px 20px; }
+  .audit-card.flagged { border-color: var(--rust); }
+  .audit-head { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 10px; }
+  .audit-head .flag { color: var(--rust); }
+  .audit-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 14px; margin-bottom: 12px; }
+  .audit-stat { font-size: 12px; color: var(--muted); }
+  .audit-stat b { display: block; font-size: 19px; color: var(--ink); font-weight: 700; }
+  .audit-conclusion { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--hairline); padding-top: 12px; margin-top: 4px; }
+  .audit-conclusion strong { color: var(--rust); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--hairline); border-radius: 10px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .card h4 { margin: 0 0 8px; font-size: 14.5px; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .card .num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700; margin-right: 8px; }
+
+  .stack-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .stack-pills span { background: var(--card); border: 1px solid var(--hairline); border-radius: 999px; padding: 6px 13px; font-size: 12.5px; color: var(--muted); }
+
+  pre { background: var(--code-bg); color: var(--code-ink); padding: 16px 18px; border-radius: 10px; font-size: 13px; overflow-x: auto; margin: 0 0 14px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .quickstart-note { font-size: 13px; color: var(--muted); margin-top: -4px; }
+
+  ul.limits, ul.roadmap { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14.5px; }
+  ul.limits li, ul.roadmap li { margin-bottom: 10px; }
+  ul.limits li strong, ul.roadmap li strong { color: var(--ink); }
+
+  footer { padding: 34px 0 60px; text-align: center; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--muted); }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    .pipeline-row { flex-direction: column; }
+    .arrow { transform: rotate(90deg); padding: 4px 0; }
+    .brand span.brand-text { display: inline; }
+    .nav-links a:not(.gh-link) { display: none; }
+    .nav-links { gap: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="#top"><span class="mark">F</span> FairHire AI</a>
+    <nav class="nav-links">
+      <a href="#architecture">Architecture</a>
+      <a href="#demo">Demo run</a>
+      <a href="#decisions">Design decisions</a>
+      <a href="#quickstart">Quickstart</a>
+      <a class="gh-link" href="https://github.com/johnsonjamesr02-png/fairhire-ai">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<div id="top" class="wrap hero">
+  <p class="eyebrow">Portfolio project · AI hiring pipeline + compliance</p>
+  <h1>An AI resume screener that audits itself for bias — before you ship it.</h1>
+  <p class="lede">Most "AI resume screener" side projects stop at matching keywords to a job description. FairHire AI adds the piece that actually matters to an employer: it runs the exact statistical test regulators use — the EEOC's four-fifths rule and NYC Local Law 144's bias-audit requirement for Automated Employment Decision Tools — against its own recommendations.</p>
+  <div class="badges">
+    <img src="https://github.com/johnsonjamesr02-png/fairhire-ai/actions/workflows/tests.yml/badge.svg" alt="tests status">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT license">
+    <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
+  </div>
+  <div class="cta-row">
+    <a class="btn primary" href="https://github.com/johnsonjamesr02-png/fairhire-ai">View source on GitHub</a>
+    <a class="btn ghost" href="#demo">See a real run ↓</a>
+  </div>
+</div>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Why this project exists</h2>
+    <p class="section-sub">The one-sentence pitch: <strong>a hiring AI's accuracy and its legal exposure should be measured together, not separately</strong> — this project does both, end to end, in one pipeline.</p>
+    <div class="pitch">
+      NYC Local Law 144 (in effect since 2023, actively enforced in 2026) requires employers to commission an independent bias audit before using an AEDT on candidates, publish the results, and give candidates notice. The underlying math — selection rate by demographic group, impact ratio, flagged if under 80% — is exactly what <code>backend/bias_audit.py</code> implements. Building that logic, rather than just wrapping an LLM in a chat box, is what separates this from a weekend "ChatGPT resume matcher."
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <h2>Architecture</h2>
+    <p class="section-sub">Scoring and auditing are deliberately two independent modules joined only at the end — the way a real compliance pipeline has to work.</p>
+
+    <div class="pipeline-row">
+      <div class="stage"><h4>Resume text</h4><p>Unstructured .txt input, one per candidate</p></div>
+      <div class="arrow">→</div>
+      <div class="stage"><h4>ai_service.parse_resume()</h4><p>Structured JSON: skills, years, education</p></div>
+      <div class="arrow">→</div>
+      <div class="stage"><h4>ai_service.score_candidate()</h4><p>0–100 fit score + rationale, qualifications only</p></div>
+    </div>
+    <div class="pipeline-row" style="margin-top:10px;">
+      <div class="stage"><h4>Job description</h4><p>Parsed into required / preferred skills, min years</p></div>
+      <div class="arrow">→</div>
+      <div class="stage audit"><h4>+ EEO group label</h4><p>Collected separately, never seen by the scorer</p></div>
+      <div class="arrow">→</div>
+      <div class="stage audit"><h4>bias_audit.run_four_fifths_audit()</h4><p>Selection rate, impact ratio, flagged groups</p></div>
+    </div>
+    <p class="note-inline">Demographic data is joined to results only <em>after</em> scoring, for audit purposes — mirroring how real EEO self-identification data is collected separately from applications. An AI system that infers race or gender from a résumé to "check for bias" would itself be a bias risk.</p>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <h2>See it in action</h2>
+    <p class="section-sub">Real output from <code>python scripts/run_demo.py</code> against the 8 synthetic sample résumés and job description shipped in <code>data/</code> — reproducible with no API key, no setup, no editing.</p>
+
+    <div class="demo-banner"><span class="dot"></span> DEMO_MODE = True — no <code>ANTHROPIC_API_KEY</code> set, running the deterministic offline stand-in scorer</div>
+
+    <table class="results">
+      <thead>
+        <tr><th>Candidate</th><th>Fit score</th><th>Selected</th><th>Group</th><th>Rationale</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Alex Rivera</td><td>86.0</td><td><span class="pill yes">Yes</span></td><td class="grp">Group A</td><td>4/5 required skills · 5 yrs vs 1 required</td></tr>
+        <tr><td>Riley Chen</td><td>86.0</td><td><span class="pill yes">Yes</span></td><td class="grp">Group A</td><td>4/5 required skills · 6 yrs vs 1 required</td></tr>
+        <tr><td>Morgan Patel</td><td>72.0</td><td><span class="pill yes">Yes</span></td><td class="grp">Group B</td><td>3/5 required skills · 1 yr vs 1 required</td></tr>
+        <tr><td>Taylor Nguyen</td><td>58.0</td><td><span class="pill no">No</span></td><td class="grp">Group A</td><td>2/5 required skills · 4 yrs vs 1 required</td></tr>
+        <tr><td>Jamie Osei</td><td>58.0</td><td><span class="pill no">No</span></td><td class="grp">Group B</td><td>2/5 required skills · 2 yrs vs 1 required</td></tr>
+        <tr><td>Sam Delgado</td><td>44.0</td><td><span class="pill no">No</span></td><td class="grp">Group A</td><td>1/5 required skills · 3 yrs vs 1 required</td></tr>
+        <tr><td>Jordan Kim</td><td>30.0</td><td><span class="pill no">No</span></td><td class="grp">Group B</td><td>0/5 required skills · 2 yrs vs 1 required</td></tr>
+        <tr><td>Casey Thompson</td><td>0.0</td><td><span class="pill no">No</span></td><td class="grp">Group B</td><td>0/5 required skills · 0 yrs vs 1 required</td></tr>
+      </tbody>
+    </table>
+
+    <div class="audit-card flagged">
+      <div class="audit-head"><span class="flag">⚠</span> Bias audit result — EEOC four-fifths rule</div>
+      <div class="audit-grid">
+        <div class="audit-stat">Reference group<b>Group A</b></div>
+        <div class="audit-stat">Group A selection rate<b>50%</b></div>
+        <div class="audit-stat">Group B selection rate<b>25%</b></div>
+        <div class="audit-stat">Group B impact ratio<b>0.50</b></div>
+      </div>
+      <div class="audit-conclusion">
+        <strong>Flagged: Group B</strong> falls below the 80% four-fifths threshold relative to Group A (0.50 &lt; 0.80). Under NYC Local Law 144, a tool producing this outcome would require further investigation before use in a covered jurisdiction — the pipeline catches this automatically, on every run, with no extra step.
+      </div>
+    </div>
+    <p class="quickstart-note">This is the actual, unedited output of the offline demo mode on the sample data — not a mockup. The 7-test suite in <code>tests/test_bias_audit.py</code> pins the edge case that matters most: a ratio of exactly 0.80 must not be flagged, 0.79 must be.</p>
+  </div>
+</section>
+
+<section id="decisions">
+  <div class="wrap">
+    <h2>Design decisions worth explaining in an interview</h2>
+    <div class="cards">
+      <div class="card"><h4><span class="num">1</span>Demographic data never touches the scoring model</h4><p>It's joined to results only afterward, for audit purposes. An AI system that infers race/gender from a résumé to "check for bias" would itself be a bias risk.</p></div>
+      <div class="card"><h4><span class="num">2</span>The audit module doesn't know what produced the scores</h4><p>It takes any list of <code>{group, selected}</code> and audits it — reusable against a completely different scoring method without touching this file, a common ask in real MLOps/compliance work.</p></div>
+      <div class="card"><h4><span class="num">3</span>Structured output, not chat</h4><p>Every LLM call returns a fixed, validated JSON schema. The difference between "I used the ChatGPT API" and "I built an LLM into a software pipeline."</p></div>
+      <div class="card"><h4><span class="num">4</span>Offline demo mode by design</h4><p>Not an afterthought — it's what lets this ship as a fully working, testable project with no API key, and it's a realistic local-dev pattern for any paid API.</p></div>
+    </div>
+    <div class="stack-pills">
+      <span>FastAPI</span><span>Pydantic</span><span>Anthropic Claude API</span><span>pytest</span><span>vanilla JS frontend</span><span>pandas-free pure-Python stats</span>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <h2>Quickstart</h2>
+    <p class="section-sub">Works immediately with no API key. Set <code>ANTHROPIC_API_KEY</code> later to switch the same code path to live Claude calls.</p>
+<pre><code>git clone https://github.com/johnsonjamesr02-png/fairhire-ai.git
+cd fairhire-ai
+pip install -r requirements.txt
+
+# Runs the full pipeline end-to-end, offline, no key needed:
+python scripts/run_demo.py
+
+# Run the unit tests:
+python -m pytest tests/ -v
+
+# For live Claude API scoring instead of the demo stand-in:
+export ANTHROPIC_API_KEY=your-key-here
+python scripts/run_demo.py
+
+# Run the API + local dashboard:
+cd backend && uvicorn main:app --reload --port 8000
+# then open frontend/index.html in a browser</code></pre>
+    <p class="quickstart-note">Full endpoint docs, module-by-module breakdown, and the complete architecture diagram are in the <a href="https://github.com/johnsonjamesr02-png/fairhire-ai#readme">project README</a>.</p>
+  </div>
+</section>
+
+<section id="limitations">
+  <div class="wrap">
+    <h2>Honest limitations</h2>
+    <ul class="limits">
+      <li><strong>The demo-mode scorer is simple keyword/years matching</strong> — a stand-in for the LLM, not a claim that keyword matching is good hiring practice. Real scoring happens through Claude when <code>ANTHROPIC_API_KEY</code> is set.</li>
+      <li><strong>Eight synthetic candidates is enough to exercise the math and unit tests</strong>, not enough to be statistically meaningful — a real audit needs a real applicant pool.</li>
+      <li><strong>This is a personal/portfolio project, not a compliance product.</strong> A real AEDT bias audit must be conducted by an independent auditor under Local Law 144 — this demonstrates understanding of that requirement, it doesn't satisfy it.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="wrap">
+    <h2>Roadmap ideas</h2>
+    <ul class="roadmap">
+      <li><strong>Real embeddings similarity</strong> as a second signal alongside the LLM score, replacing keyword skill-matching in demo mode.</li>
+      <li><strong>Intersectional group analysis</strong> (e.g. Black women vs. all others), which Local Law 144 audits require alongside single-category analysis.</li>
+      <li><strong>Persisted run history</strong> so selection rates can be tracked over time, not just per-run.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    MIT licensed · Built by <a href="https://github.com/johnsonjamesr02-png">James Johnson</a> ·
+    <a href="https://github.com/johnsonjamesr02-png/fairhire-ai">Source on GitHub</a>
+  </div>
+</footer>
+
+</body>
+</html>
